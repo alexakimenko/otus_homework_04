@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from abc import ABC
-import re
-import json
 import datetime
-import logging
 import hashlib
+import json
+import logging
+import re
 import uuid
+from abc import ABC
 from argparse import ArgumentParser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from scoring import get_score, get_interests
+from scoring import get_interests, get_score
 
 SALT = "Otus"
 ADMIN_LOGIN = "admin"
@@ -38,6 +38,7 @@ GENDERS = {
     FEMALE: "female",
 }
 MAX_AGE = 70
+
 
 class Field(ABC):
     def __init__(self, name, required=False, nullable=True):
@@ -74,7 +75,8 @@ class IntField(Field):
 class EmailField(CharField):
     def validate(self, value):
         ok, reason = super().validate(value)
-        if not ok: return False, reason
+        if not ok:
+            return False, reason
         if value and not re.match(r"[^@]+@[^@]+\.[^@]+", value):
             return False, f"Field '{self.name}' has an invalid email format."
         return True, None
@@ -88,7 +90,10 @@ class PhoneField(Field):
                 return False, f"Field '{self.name}' must be a string or a number."
             value_str = str(value)
             if len(value_str) != 11 or not value_str.startswith("7"):
-                return False, f"Field '{self.name}' must be 11 characters long and start with '7'."
+                return (
+                    False,
+                    f"Field '{self.name}' must be 11 characters long and start with '7'.",
+                )
 
         return True, None
 
@@ -97,7 +102,8 @@ class DateField(CharField):
 
     def validate(self, value):
         ok, reason = super().validate(value)
-        if not ok: return False, reason
+        if not ok:
+            return False, reason
         if value:
             try:
                 datetime.datetime.strptime(value, "%d.%m.%Y")
@@ -118,7 +124,8 @@ class BirthDayField(DateField):
 
     def validate(self, value):
         ok, reason = super().validate(value)
-        if not ok: return False, reason
+        if not ok:
+            return False, reason
         if value:
             birthdate = datetime.datetime.strptime(value, "%d.%m.%Y")
             age = self.get_age(birthdate)
@@ -130,7 +137,8 @@ class BirthDayField(DateField):
 class GenderField(IntField):
     def validate(self, value):
         ok, reason = super().validate(value)
-        if not ok: return False, reason
+        if not ok:
+            return False, reason
         if value and value not in [UNKNOWN, MALE, FEMALE]:
             return False, f"Field '{self.name}' has invalid value."
         return True, None
@@ -188,7 +196,7 @@ class ClientsInterestsRequest(Request):
             res[cid] = get_interests(store, cid)
         return res
 
-# аргументы валидны, если валидны все поля по отдельности и если присутсвует хоть одна пара phone-email, first name-last name, gender-birthday с непустыми значениями.
+
 class OnlineScoreRequest(Request):
     first_name = CharField(name="first_name", required=False, nullable=True)
     last_name = CharField(name="last_name", required=False, nullable=True)
@@ -197,7 +205,15 @@ class OnlineScoreRequest(Request):
     birthday = BirthDayField(name="birthday", required=False, nullable=True)
     gender = GenderField(name="gender", required=False, nullable=True)
 
-    def __init__(self, first_name=None, last_name=None, email=None, phone=None, birthday=None, gender=None):
+    def __init__(
+        self,
+        first_name=None,
+        last_name=None,
+        email=None,
+        phone=None,
+        birthday=None,
+        gender=None,
+    ):
         self.first_name = first_name
         self.last_name = last_name
         self.email = email
@@ -207,23 +223,31 @@ class OnlineScoreRequest(Request):
 
     def validate_fields(self):
         ok, reasons = super().validate_fields()
-        if not ok: return False, reasons
-        if ((self.phone is not None and self.email is not None) or
-            (self.first_name is not None and self.last_name is not None) or
-            (self.gender is not None and self.birthday is not None)):
+        if not ok:
+            return False, reasons
+        if (
+            (self.phone is not None and self.email is not None)
+            or (self.first_name is not None and self.last_name is not None)
+            or (self.gender is not None and self.birthday is not None)
+        ):
             return True, None
-        return False, "At least one pair phone-email, first name-last name, gender-birthday is required."
+        return (
+            False,
+            "At least one pair phone-email, first name-last name, gender-birthday is required.",
+        )
 
     def get_score(self, store):
-        return {"score": get_score(
-            store,
-            phone=self.phone,
-            email=self.email,
-            birthday=self.birthday,
-            gender=self.gender,
-            first_name=self.first_name,
-            last_name=self.last_name,
-        )}
+        return {
+            "score": get_score(
+                store,
+                phone=self.phone,
+                email=self.email,
+                birthday=self.birthday,
+                gender=self.gender,
+                first_name=self.first_name,
+                last_name=self.last_name,
+            )
+        }
 
 
 class MethodRequest(Request):
@@ -242,7 +266,8 @@ class MethodRequest(Request):
 
     def validate_fields(self):
         ok, reasons = super().validate_fields()
-        if not ok: return False, reasons
+        if not ok:
+            return False, reasons
         return True, ""
 
     @property
@@ -252,16 +277,17 @@ class MethodRequest(Request):
 
 def check_auth(request):
     if request.is_admin:
-        digest = hashlib.sha512((datetime.datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT).encode('utf-8')).hexdigest()
+        digest = hashlib.sha512((datetime.datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT).encode("utf-8")).hexdigest()
     else:
-        digest = hashlib.sha512((request.account + request.login + SALT).encode('utf-8')).hexdigest()
+        digest = hashlib.sha512((request.account + request.login + SALT).encode("utf-8")).hexdigest()
     return digest == request.token
 
 
 def method_handler(request, ctx, store):
     request = MethodRequest(**request["body"])
     ok, reasons = request.validate_fields()
-    if not ok: return reasons, INVALID_REQUEST
+    if not ok:
+        return reasons, INVALID_REQUEST
 
     if not check_auth(request):
         return ERRORS[FORBIDDEN], FORBIDDEN
@@ -269,32 +295,32 @@ def method_handler(request, ctx, store):
     if request.method == "clients_interests":
         scoring_request = ClientsInterestsRequest(**request.arguments)
         ok, reasons = scoring_request.validate_fields()
-        if not ok: return reasons, INVALID_REQUEST
+        if not ok:
+            return reasons, INVALID_REQUEST
         score = scoring_request.get_intersts(store, scoring_request.client_ids)
         return score, OK
     else:
         scoring_request = OnlineScoreRequest(**request.arguments)
         ok, reasons = scoring_request.validate_fields()
-        if not ok: return reasons, INVALID_REQUEST
+        if not ok:
+            return reasons, INVALID_REQUEST
         score = scoring_request.get_score(store)
         return score, OK
 
 
 class MainHTTPHandler(BaseHTTPRequestHandler):
-    router = {
-        "method": method_handler
-    }
+    router = {"method": method_handler}
     store = None
 
     def get_request_id(self, headers):
-        return headers.get('HTTP_X_REQUEST_ID', uuid.uuid4().hex)
+        return headers.get("HTTP_X_REQUEST_ID", uuid.uuid4().hex)
 
     def do_POST(self):
         response, code = {}, OK
         context = {"request_id": self.get_request_id(self.headers)}
         request = None
         try:
-            data_string = self.rfile.read(int(self.headers['Content-Length']))
+            data_string = self.rfile.read(int(self.headers["Content-Length"]))
             request = json.loads(data_string)
         except:
             code = BAD_REQUEST
@@ -320,7 +346,7 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
             r = {"error": response or ERRORS.get(code, "Unknown Error"), "code": code}
         context.update(r)
         logging.info(context)
-        self.wfile.write(json.dumps(r).encode('utf-8'))
+        self.wfile.write(json.dumps(r).encode("utf-8"))
         return
 
 
@@ -329,8 +355,12 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--port", action="store", type=int, default=8080)
     parser.add_argument("-l", "--log", action="store", default=None)
     args = parser.parse_args()
-    logging.basicConfig(filename=args.log, level=logging.INFO,
-                        format='[%(asctime)s] %(levelname).1s %(message)s', datefmt='%Y.%m.%d %H:%M:%S')
+    logging.basicConfig(
+        filename=args.log,
+        level=logging.INFO,
+        format="[%(asctime)s] %(levelname).1s %(message)s",
+        datefmt="%Y.%m.%d %H:%M:%S",
+    )
     server = HTTPServer(("localhost", args.port), MainHTTPHandler)
     logging.info("Starting server at %s" % args.port)
     try:
