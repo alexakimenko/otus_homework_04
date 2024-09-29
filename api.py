@@ -287,24 +287,30 @@ def method_handler(request, ctx, store):
     request = MethodRequest(**request["body"])
     ok, reasons = request.validate_fields()
     if not ok:
+        logging.info("request invalid")
         return reasons, INVALID_REQUEST
 
     if not check_auth(request):
+        logging.info("request forbidden")
         return ERRORS[FORBIDDEN], FORBIDDEN
 
     if request.method == "clients_interests":
         scoring_request = ClientsInterestsRequest(**request.arguments)
         ok, reasons = scoring_request.validate_fields()
         if not ok:
+            logging.info("clients_interests request invalid")
             return reasons, INVALID_REQUEST
+        logging.info("clients_interests request successful")
         score = scoring_request.get_intersts(store, scoring_request.client_ids)
         return score, OK
     else:
         scoring_request = OnlineScoreRequest(**request.arguments)
         ok, reasons = scoring_request.validate_fields()
         if not ok:
+            logging.info("Scoring request invalid")
             return reasons, INVALID_REQUEST
         score = scoring_request.get_score(store)
+        logging.info("Scoring request successful")
         return score, OK
 
 
