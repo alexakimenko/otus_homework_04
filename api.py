@@ -53,63 +53,46 @@ class Field(ABC):
 class CharField(Field):
     def validate(self, value):
         if self.required and value is None:
-            return False, f"Field '{self.name}' is required but not provided."
+            raise ValueError(f"Field '{self.name}' is required but not provided.")
         if not self.nullable and value is None:
-            return False, f"Field '{self.name}' cannot be null."
+            raise ValueError(f"Field '{self.name}' cannot be null.")
         if value and not isinstance(value, str):
-            return False, f"Field '{self.name}' value must be a string."
-        return True, None
+            raise ValueError(f"Field '{self.name}' value must be a string.")
 
 
 class IntField(Field):
     def validate(self, value):
         if self.required and value is None:
-            return False, f"Field '{self.name}' is required but not provided."
+            raise ValueError(f"Field '{self.name}' is required but not provided.")
         if not self.nullable and value is None:
-            return False, f"Field '{self.name}' cannot be null."
+            raise ValueError(f"Field '{self.name}' cannot be null.")
         if value and not isinstance(value, int):
-            return False, f"Field '{self.name}' value must be an integer."
-        return True, None
+            raise ValueError(f"Field '{self.name}' value must be an integer.")
 
 
 class EmailField(CharField):
     def validate(self, value):
-        ok, reason = super().validate(value)
-        if not ok:
-            return False, reason
+        super().validate(value)
         if value and not re.match(r"[^@]+@[^@]+\.[^@]+", value):
-            return False, f"Field '{self.name}' has an invalid email format."
-        return True, None
-
+            raise ValueError(f"Field '{self.name}' has an invalid email format.")
 
 class PhoneField(Field):
 
     def validate(self, value):
         if self.required:
             if not isinstance(value, (str, int)):
-                return False, f"Field '{self.name}' must be a string or a number."
+                raise ValueError(f"Field '{self.name}' must be a string or a number.")
             value_str = str(value)
             if len(value_str) != 11 or not value_str.startswith("7"):
-                return (
-                    False,
-                    f"Field '{self.name}' must be 11 characters long and start with '7'.",
-                )
-
-        return True, None
+                raise ValueError(f"Field '{self.name}' must be 11 characters long and start with '7'.")
 
 
 class DateField(CharField):
 
     def validate(self, value):
-        ok, reason = super().validate(value)
-        if not ok:
-            return False, reason
+        super().validate(value)
         if value:
-            try:
-                datetime.datetime.strptime(value, "%d.%m.%Y")
-            except (ValueError, TypeError):
-                return False, f"Field '{self.name}' must be in DD.MM.YYYY format."
-        return True, None
+            datetime.datetime.strptime(value, "%d.%m.%Y")
 
 
 class BirthDayField(DateField):
@@ -123,62 +106,48 @@ class BirthDayField(DateField):
         return years
 
     def validate(self, value):
-        ok, reason = super().validate(value)
-        if not ok:
-            return False, reason
+        super().validate(value)
         if value:
             birthdate = datetime.datetime.strptime(value, "%d.%m.%Y")
             age = self.get_age(birthdate)
             if age > MAX_AGE:
-                return False, f"Field '{self.name}' cannot be older than 70 years."
-        return True, None
+                raise ValueError(f"Field '{self.name}' cannot be older than 70 years.")
 
 
 class GenderField(IntField):
     def validate(self, value):
-        ok, reason = super().validate(value)
-        if not ok:
-            return False, reason
+        super().validate(value)
         if value and value not in [UNKNOWN, MALE, FEMALE]:
-            return False, f"Field '{self.name}' has invalid value."
-        return True, None
+            raise ValueError(f"Field '{self.name}' has invalid value.")
 
 
 class ClientIDsField(Field):
     def validate(self, value):
         if self.required and not value:
-            return False, f"Field '{self.name}' is required but not provided."
+            raise ValueError(f"Field '{self.name}' is required but not provided.")
         if not self.nullable and not value:
-            return False, f"Field '{self.name}' cannot be null."
+            raise ValueError(f"Field '{self.name}' cannot be null.")
         if self.required and not isinstance(value, list):
-            return False, f"Field '{self.name}' value must be a list."
+            raise ValueError(f"Field '{self.name}' value must be a list.")
         if value and not all(isinstance(v, int) for v in value):
-            return False, f"Field '{self.name}' value must be a list of integers."
-        return True, None
+            raise ValueError(f"Field '{self.name}' value must be a list of integers.")
 
 
 class ArgumentsField(Field):
     def validate(self, value):
         if value is None:
             if self.required:
-                return False, f"Field '{self.name}' is required but not provided."
-            return True, None
-
+                raise ValueError(f"Field '{self.name}' is required but not provided.")
         if not isinstance(value, dict):
-            return False, f"Field '{self.name}' must be a dictionary (JSON object)."
-        return True, None
+            raise ValueError(f"Field '{self.name}' must be a dictionary (JSON object).")
 
 
 class Request:
     def validate_fields(self):
-        errors = []
         for field_name, field_type in self.__class__.__dict__.items():
             if isinstance(field_type, Field):
                 value = getattr(self, field_name)
-                ok, reason = field_type.validate(value)
-                if not ok:
-                    errors.append(reason)
-        return len(errors) == 0, errors
+                field_type.validate(value)
 
 
 class ClientsInterestsRequest(Request):
@@ -222,19 +191,13 @@ class OnlineScoreRequest(Request):
         self.gender = gender
 
     def validate_fields(self):
-        ok, reasons = super().validate_fields()
-        if not ok:
-            return False, reasons
-        if (
+        super().validate_fields()
+        if not (
             (self.phone is not None and self.email is not None)
             or (self.first_name is not None and self.last_name is not None)
             or (self.gender is not None and self.birthday is not None)
         ):
-            return True, None
-        return (
-            False,
-            "At least one pair phone-email, first name-last name, gender-birthday is required.",
-        )
+            raise ValueError("At least one pair phone-email, first name-last name, gender-birthday is required.")
 
     def get_score(self, store):
         return {
@@ -265,10 +228,7 @@ class MethodRequest(Request):
         self.method = method
 
     def validate_fields(self):
-        ok, reasons = super().validate_fields()
-        if not ok:
-            return False, reasons
-        return True, ""
+        super().validate_fields()
 
     @property
     def is_admin(self):
@@ -285,10 +245,11 @@ def check_auth(request):
 
 def method_handler(request, ctx, store):
     request = MethodRequest(**request["body"])
-    ok, reasons = request.validate_fields()
-    if not ok:
-        logging.info("request invalid")
-        return reasons, INVALID_REQUEST
+    try:
+        request.validate_fields()
+    except Exception as ex:
+        logging.info(f"request invalid with exception: {ex}")
+        return str(ex), INVALID_REQUEST
 
     if not check_auth(request):
         logging.info("request forbidden")
@@ -296,19 +257,22 @@ def method_handler(request, ctx, store):
 
     if request.method == "clients_interests":
         scoring_request = ClientsInterestsRequest(**request.arguments)
-        ok, reasons = scoring_request.validate_fields()
-        if not ok:
-            logging.info("clients_interests request invalid")
-            return reasons, INVALID_REQUEST
+        try:
+            scoring_request.validate_fields()
+        except Exception as ex:
+            logging.info(f"clients_interests request invalid with exception: {ex}")
+            return str(ex), INVALID_REQUEST
+
         logging.info("clients_interests request successful")
         score = scoring_request.get_intersts(store, scoring_request.client_ids)
         return score, OK
     else:
         scoring_request = OnlineScoreRequest(**request.arguments)
-        ok, reasons = scoring_request.validate_fields()
-        if not ok:
-            logging.info("Scoring request invalid")
-            return reasons, INVALID_REQUEST
+        try:
+            scoring_request.validate_fields()
+        except Exception as ex:
+            logging.info(f"Scoring request invalid with exception: {ex}")
+            return str(ex), INVALID_REQUEST
         score = scoring_request.get_score(store)
         logging.info("Scoring request successful")
         return score, OK

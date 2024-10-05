@@ -171,7 +171,7 @@ class TestSuite(unittest.TestCase):
         }
         self.set_valid_auth(request)
         response, code = self.get_response(request)
-        self.assertEqual(api.OK, code)
+        self.assertEqual(api.OK, code, response)
         score = response.get("score")
         self.assertEqual(score, 3)
 
